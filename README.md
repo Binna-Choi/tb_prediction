@@ -40,10 +40,6 @@ Data provided by countries and territories are selected as predictor variables
 - GDP per capita in 2022
 - The number of population in 2022
 
-## Data preprocessing
-- Missing: 50% values are miisng in observed, the variable is deleted.
-- Standardized data: Fit scaler (mean and sd) for continuous variables.
-
 ## References
 a. [WHO TB data](https://www.who.int/teams/global-tuberculosis-programme/data) <br>
 b. [World Bank](https://data.worldbank.org)
