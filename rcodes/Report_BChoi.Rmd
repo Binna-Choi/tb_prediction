@@ -1,0 +1,301 @@
+---
+title: "Analysis of Incidences of Tuberculosis (TB)"
+author: "Bich Na Choi"
+date: "2023-12-15"
+output:
+  pdf_document: default
+  html_document:
+df_print: paged
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/bchoi/Google Drive/LMU Homework Tasks/data")
+
+# library and Source files
+library(tidyverse)
+library(ggrepel)
+library(gridExtra)
+library(patchwork)
+library(glmnet)
+library(glmtoolbox)
+source("gtb_theme.R")
+
+# Read csv
+tb_estimates         <- read_csv("TB_burden.csv")
+gdp                  <- read_csv("gdp_per_capita.csv")
+TB_budget            <- read_csv("TB_budget.csv") 
+TB_contact           <- read_csv("TB_contact.csv") 
+TB_community         <- read_csv("TB_community.csv") 
+TB_laboratory        <- read_csv("TB_laboratories.csv") 
+TB_expenditure       <- read_csv("TB_expenditure.csv") 
+TB_notifications     <- read_csv("TB_notifications.csv") 
+TB_policies_services <- read_csv("TB_policies_services.csv") 
+pop                  <- read_csv("population.csv")
+TB_data_dictionary   <- read_csv("TB_data_dictionary.csv") 
+
+# Read csv files; variables names to data pre-processing
+cat_var_name   <- read_csv("cat_var.csv") 
+notif_var_name <- read_csv("notif_var.csv") 
+combied_name <- read_csv("combied_name.csv")
+```
+#### Using data from WHO TB estimates (https://www.who.int/teams/global-tuberculosis-programme/data) and any other public data sources:
+```{r tb data processing, include=FALSE}
+#dim(tb_estimates) # size of data: 4917 * 50
+select_var <- c("country", "iso3", "g_whoregion", "year", "e_pop_num", "c_newinc_100k", "e_inc_num")
+tb_selected <- tb_estimates %>% select(select_var)
+
+tb_global <- tb_selected %>%  group_by(year) %>%  summarise(inc_num = sum(e_inc_num, na.rm=TRUE), 
+                                                            pop_num = sum(e_pop_num, na.rm=TRUE))
+
+tb_global$tb_inc_rate_100k <- tb_global$inc_num/tb_global$pop_num * 1e5
+tb_global$tb_inc_rate <- tb_global$inc_num/tb_global$pop_num 
+tb_global$g_whoregion <- "GLOBAL"
+
+
+# Regions by WHO
+tb_region <- tb_selected %>%  group_by(g_whoregion, year) %>%  summarise(inc_num = sum(e_inc_num, na.rm=TRUE), 
+                                                                         pop_num = sum(e_pop_num, na.rm=TRUE), .groups = 'drop')
+
+
+tb_region$tb_inc_rate <- tb_region$inc_num/tb_region$pop_num
+tb_region$tb_inc_rate_100k <- tb_region$inc_num/tb_region$pop_num * 1e5
+
+
+# Merge global and regional data 
+tb_total <- rbind(tb_global, tb_region)
+```
+##### 1. Graph per capita TB incidence rates over time for all countries, grouped by WHO region;
+
+```{r figure1.a, warning = FALSE, fig.align="center", out.width="75%"}
+ggplot(tb_total,(aes(x=year,y=tb_inc_rate, group=g_whoregion,color=g_whoregion)))+
+       geom_line(linewidth=0.8) +
+       theme_gtb() +
+       labs(x="Years",y="Estimates TB rater per capita", 
+            title = "Global trends in the TB incidence rate by WHO region, 2000 – 2022",  
+            colour = "Region") 
+```
+The global Tuberculosis (TB) incidence rate is shown by the blue line. The global trend in TB incidence per capita is gradually decreasing. The per capita incidence rates in Africa and South-East Asia are above the global trend.The other regions are below the global trend. The Americas and Europe regions have the lowest TB incidence rates in all years. Trends in TB incidence rates in each region tend to be decreasing; however, some regions have shown an increase in the last 3 years. To explore the trend at regional level, we provides plots separately. 
+
+```{r figure1.b, warning = FALSE, fig.align="center", out.width="75%"}
+ggplot(tb_region,(aes(x=year,y=tb_inc_rate)))+
+    geom_line()+
+    labs(x="Years",y="Estimates TB rater per capita", 
+            title = "Global trends in the TB incidence rate by WHO region, 2000 - 2022") +
+    facet_wrap(~g_whoregion, scales = "free") 
+```    
+At the regional level, the TB incidence rates show an overall downward trend in all six regions, but the three (Americas, South-East Asia and Western Pacific) regions show an increasing trend over the past three years. The Eastern Mediterranean and European regions show a fluctuating trend over the last 3 years. In contrast, the Africa region has shown a continuous downward trend since 2005.
+
+
+
+
+
+##### 2.	graph the relationship between per capita TB incidence and per capita GDP;
+
+```{r fig2 data preprocessing, include=FALSE, fig.cap="Global trends in the TB incidence rate by WHO region in 2022"}
+years <- as.character(seq(2000, 2022)) # years are matched with TB estimates data
+gdp_dat <- gdp %>% select("Country Name", "Country Code", years); 
+colnames(gdp_dat) <- c("country", "iso3", years)
+
+gdp_dat_trnp <- gdp_dat %>% gather(year, gdp, "2000":"2022")
+gdp_dat_trnp <- gdp_dat_trnp %>% mutate(year = as.integer(year)) 
+tb_estimates <- tb_estimates %>% mutate(year = as.integer(year)) 
+
+raw_dat <- left_join(tb_estimates, gdp_dat_trnp, by = c("iso3" = "iso3", "year" = "year"))
+select_var <-  c("country.x", "iso3", "year", "e_pop_num", "e_inc_100k",  "e_inc_num", "gdp")
+
+anlys_dat <- raw_dat %>% select(select_var)
+
+anlys_dat$tb_inc_rate_100k <- anlys_dat$e_inc_num/anlys_dat$e_pop_num * 1e5
+anlys_dat$tb_inc_rate <- anlys_dat$e_inc_num/anlys_dat$e_pop_num 
+anlys_dat$pop_weight <- anlys_dat$e_pop_num/sum(anlys_dat$e_pop_num)
+anlys_dat_2022 <- anlys_dat %>% filter(year==2022)
+```
+
+``````{r, include = FALSE}
+# fig.2.b <- anlys_dat_2022 %>% 
+#     ggplot(aes(x=gdp/1e3,y=e_inc_100k)) +
+#     geom_point() +
+#     scale_x_log10() +
+#     #+ scale_y_log10(limits=c(1,1000)) +
+#     xlab('GDP per capita (US$ thousands)') +
+#     ylab('Incidence per 100k population') +
+#     ggtitle("The relationship between GDP per capita and TB incidence, 2022")+
+#     theme_gtb() 
+# 
+# fig.2.c <- anlys_dat_2022 %>% 
+#     ggplot(aes(x=gdp/1e3,y=e_inc_100k)) +
+#     geom_point() +
+#     #scale_x_log10()
+#     scale_y_log10(limits=c(1,1000)) +
+#     xlab('GDP per capita (US$ thousands)') +
+#     ylab('Incidence per 100k population') +
+#     ggtitle("The relationship between GDP per capita and TB incidence, 2022")+
+#     theme_gtb()
+# 
+```
+```{r exercise2 figure, warning=FALSE, fig.width=12, fig.asp=0.518, out.width="100%", fig.align="default", echo=TRUE}
+fig.2.a <- anlys_dat_2022 %>% 
+    ggplot(aes(x=gdp/1e3,y=e_inc_100k)) +
+    geom_point() +
+    xlab('GDP per capita (US$ thousands)') +
+    ylab('Incidence per 100k population') +
+    ggtitle("The relationship between GDP per capita and TB incidence, 2022")+
+    theme_gtb() 
+
+
+fig.2.b <- anlys_dat_2022 %>%
+    ggplot(aes(x=gdp/1e3,y=e_inc_100k)) +
+    geom_point() +
+    scale_x_log10() + scale_y_log10(limits=c(1,1000)) +
+    xlab('GDP per capita (US$ thousands)') +
+    ylab('Incidence per 100k population (log scale)') +
+    ggtitle("The relationship between GDP per capita and TB incidence, 2022")+
+    theme_gtb() +
+    geom_smooth(method='lm', formula = y~x)
+
+#grid.arrange(fig.2.a, fig.2.b) 
+fig.2.a  + fig.2.b 
+```
+
+Figure 2.a shows the relationship between GDP per capita and TB incidence per 100 000. It shows that as GDP per capita increases, the incidence of TB decreases exponentially. Figure 2.b shows the negative linear relationship between GDP per capita and TB incidence, with a logarithmic scale. In conclusion, the wealth of a country is very closely related to the incidence of TB. To explore the relationship between GDP and TB incidence rates in the past, scatter plots are provided for the years 2000, 2005, 2010, 2015, 2020 and 2022. 
+```{r figures, warning=FALSE, fig.align="center", out.width="85%",}
+selected_year <- c(2000, 2005, 2010, 2015, 2020, 2022)
+anlys_dat_recent <-  anlys_dat %>% filter(year %in% selected_year)
+fig.2.c <- anlys_dat_recent %>% 
+    ggplot(aes(x=gdp/1e3,y=e_inc_100k)) +
+    geom_point() +
+    scale_x_log10() + scale_y_log10(limits=c(1,1000)) +
+    xlab('GDP per capita (US$ thousands)') +
+    ylab('Incidence per 100k population (log scale)') +
+    ggtitle("The relationship between GDP per capita and TB incidence in the past")+
+    theme_gtb() +
+    geom_smooth(method='lm', formula = y~x)+
+    facet_wrap(~year)
+fig.2.c
+```
+The association between GDP per capita and TB incidence (with logarithmic scale) in other years. 
+
+
+##### 3. Using regression, develop a model that could predict TB incidence in a country without using data from any of the TB estimates files
+
+\
+This task aimed to predict TB incidence using the log regression prediction model in 2022. Predictor variables were collected from two primary sources. First, the TB data (not TB estimates files) was collected from WHO. Second, the GDP and population data were collected from World Bank. For developing a regression model to predict TB incidence in a country, a outcome variable and predictor variables are defined in the next step. 
+
+```{r exercise3 data preprocessing, include = FALSE}
+# Filter 2022 year from each data set
+TB_budget            <- TB_budget %>% filter(year == 2022) # 215, 43
+TB_contact           <- TB_contact %>% filter(year == 2022) # 215, 32
+TB_laboratory        <- TB_laboratory %>% filter(year == 2022) # 215, 74
+TB_expenditure       <- TB_expenditure %>% filter(year == 2022)# 215, 46
+TB_notifications     <- TB_notifications %>% filter(year == 2022) #215 208
+
+gdp_2022 <- gdp_dat_trnp %>% filter(year == 2022)
+pop_dat <- pop %>% select("Country", "iso3", years); 
+pop_dat_trnp <- pop_dat %>% gather(year, population, "2000":"2022")
+pop_dat_trnp <- pop_dat_trnp %>% mutate(year = as.double(year)) 
+pop_2022 <- pop_dat_trnp %>% filter(year == 2022)
+other_var <- left_join(gdp_2022, pop_2022, by = c("iso3" = "iso3"))
+other_var <- other_var %>% select("country", "iso3", "gdp", "population")
+
+# Merge data from WHO TB data (not TB estimates files)
+tb_list <- list(TB_budget, TB_contact, TB_laboratory, TB_expenditure, TB_notifications)  # put all data frames into list
+
+#merge all data frames together
+tb_combined <- tb_list %>% reduce(full_join, by=c("iso3" = "iso3")) 
+tb_combined <- tb_combined %>%  select(combied_name$var_name) # Delete duplicated variables (i.e., contry.x, country.y)
+
+# Merge with the gdp and population data
+tb_combined <- left_join(tb_combined, other_var, by = c("iso3" = "iso3"))
+
+# Missing data
+# drop the bad predictors (missing values  > 50% )
+missing_tb <- 100*sort(colSums(is.na(tb_combined)), decreasing =TRUE)/nrow(tb_combined)
+drop_var_70 <- names(missing_tb[missing_tb > 70]) # 286 variables 
+drop_var_50 <- names(missing_tb[missing_tb > 50]) # 196 variables
+tb_total    <- tb_combined[,!(names(tb_combined) %in% drop_var_50)]
+
+# Delete the rows, which c_newinc (response variable) value is NA
+tb_total <- tb_total %>% filter(c_newinc != "NA") # 14 rows are removed
+
+# Split data: categorical & continous variables to impute missing values
+cat_var <- tb_total %>% select(cat_var_name$cat_var)
+con_var <- tb_total %>% select(!cat_var_name$cat_var) %>% select(!c("country.x", "country.y","iso2", "iso3", "iso_numeric", "year"))
+tb_base <- tb_total %>% select(c("country.x", "g_whoregion", "iso3", "year", "c_newinc"))
+
+# (Median-imputation) for continous data
+con_var_imputed <- con_var %>% 
+    mutate_if(is.numeric, function(x) ifelse(is.na(x), median(x, na.rm = T), x))
+
+# (0-imputation) for categorical data
+cat_var_imputed <- cat_var %>% 
+    mutate_if(is.numeric, function(x) ifelse(is.na(x), 0, x))
+
+# One-hot encoding for grouped by WHO region
+tb_total$EMR    <- ifelse(tb_total$g_whoregion == "EMR", 1,0)
+tb_total$EUR    <- ifelse(tb_total$g_whoregion == "EUR", 1,0)
+tb_total$AFR    <- ifelse(tb_total$g_whoregion == "AFR", 1,0)
+tb_total$AMR    <- ifelse(tb_total$g_whoregion == "AMR", 1,0)
+tb_total$WPR    <- ifelse(tb_total$g_whoregion == "WPR", 1,0)
+tb_total$SEA    <- ifelse(tb_total$g_whoregion == "SEA", 1,0)
+
+region_var <- c("EMR", "EUR", "AFR", "AMR", "WPR", "SEA")
+region     <- tb_total %>% select(region_var)
+
+# Scaled the continuous variables (standardization)
+cont.scaled  <- con_var_imputed %>% select(!c_newinc)
+cont.scaled  <-  as.matrix(as.data.frame(scale(cont.scaled)))
+tb_imputed <- cbind(tb_base,  cont.scaled, region)
+tb_dat <- tb_imputed %>%  select(!c("country.x", "g_whoregion", "iso3",  "year")) 
+
+tb_dat <- tb_imputed %>%  select(!c("country.x", "g_whoregion", "iso3",  "year"))
+```
+
+
+####### **Outcome variable**
+The total of new and relapse cases and cases with unknown previous TB treatment history (`c_newinc`) variable is the outcome variable in a regression model to predict an incidence in a country. The outcome variable can find in the notification data. The values of the outcome that were missing in 2022 were removed. The 14 countries are removed. 
+
+####### **Predictor variables**
+All variables from WHO TB data (data provided by countries and territories are selected as predictor variables), GDP per capita and number of population are potentially considered as predictor variables. Please refer to the README.md for details of the analysis datasets. 
+
+The variables that are not available in 2022 have been dropped. In addition, variables with 50% missing values are deleted. Categorical variables are not considered as a predictor variables except WHO region variable (`g_whoregion`). The `g_whoregion` values were transformed one-hot encoded. 
+
+Finally, the 201 countries and 169 predictor variables are considered in the log regression model. 
+
+
+```{r exercise 3 figure3.1, fig.align="center", warning=FALSE, out.width="75%"}
+ggplot(tb_imputed, aes(c_newinc/1e5)) + 
+    geom_histogram(bins=30)+
+    ylab('Count') +
+    xlab('New TB cases per 100k population') +
+    ggtitle("The distributin of New TB cases per 100k, 2022")+
+    theme_gtb() 
+```
+
+The above figure shows the distribution of the new TB cases in 2022. The outcome variable is count data and the distribution is positive skewed. Hence, poisson canonical link function is used for developing a generalized linear model. 
+
+```{r exercise 3 fit}
+fit_tb <- glm(c_newinc ~ ., family="poisson", data=tb_dat)
+summary(fit_tb)
+```
+The results show the coefficients of the log regression model and whether predictor variables are statistically significant or not under the common alpha ($\alpha$) level of 0.05. 
+
+The residual plots are provided to evaluate the log regression model. 
+```{r exercise 3 figure3.2, fig.align="center", warning=FALSE, out.width="75%"}
+par(mfrow = c(2, 2))
+plot(fit_tb)
+```
+From the above residual plots, the four assumptions (Linearity, Independence, Homoscedasticity, and Normality) for a linear regression model are satisfied. 
+
+
+```{r exercise 3 r-sqaure}
+R2_tb    <- with(summary(fit_tb), 1 - deviance/null.deviance) #R-squared
+adjR2_tb <- adjR2(fit_tb);  # adjusted R-squared
+
+R2_tab<- cbind(R2_tb, adjR2_tb)
+colnames(R2_tab) <- c("R-squared", "Adj R-squared")
+knitr::kable(R2_tab)
+```
+The $R^2$ and Adjusted $R^2$ values are very closed to 1. The values imply that most of the variation (99\%) of the outcome variable is explained by predictors variables in the log regression model.
+
