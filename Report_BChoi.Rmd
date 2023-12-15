@@ -11,7 +11,7 @@ fig_caption: yes
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-setwd("/Users/bchoi/Google Drive/LMU Homework Tasks/data")
+setwd("./data")
 
 # library and Source files
 library(tidyverse)
@@ -159,7 +159,7 @@ fig.2.b <- anlys_dat_2022 %>%
 fig.2.a  + fig.2.b 
 ```
 
-Figure 2.a shows the relationship between GDP per capita and TB incidence per 100 000. It shows that as GDP per capita increases, the incidence of TB decreases exponentially. Figure 2.b shows the negative linear relationship between GDP per capita and TB incidence, with a logarithmic scale. In conclusion, the wealth of a country is very closely related to the incidence of TB. To explore the relationship between GDP and TB incidence rates in the past, scatter plots are provided for the years 2000, 2005, 2010, 2015, 2020 and 2022. 
+Figure 2.a (left) shows the relationship between GDP per capita and TB incidence per 100 000. It shows that as GDP per capita increases, the incidence of TB decreases exponentially. Figure 2.b (right) shows the negative linear relationship between GDP per capita and TB incidence, with a logarithmic scale. In conclusion, the wealth of a country is very closely related to the incidence of TB. To explore the relationship between GDP and TB incidence rates in the past, scatter plots are provided for the years 2000, 2005, 2010, 2015, 2020 and 2022. 
 ```{r figures, warning=FALSE, fig.align="center", out.width="85%",}
 selected_year <- c(2000, 2005, 2010, 2015, 2020, 2022)
 anlys_dat_recent <-  anlys_dat %>% filter(year %in% selected_year)
@@ -254,12 +254,12 @@ tb_dat <- tb_imputed %>%  select(!c("country.x", "g_whoregion", "iso3",  "year")
 
 
 ####### **Outcome variable**
-The total of new and relapse cases and cases with unknown previous TB treatment history (`c_newinc`) variable is the outcome variable in a regression model to predict an incidence in a country. The outcome variable can find in the notification data. The values of the outcome that were missing in 2022 were removed. The 14 countries are removed. 
+The total of new and relapse cases and cases with unknown previous TB treatment history (`c_newinc`) variable is the outcome variable in a regression model to predict an incidence in a country. The outcome variable can find in the notification data. The values of the outcome that were missing (14 countries) in 2022 were removed.
 
 ####### **Predictor variables**
 All variables from WHO TB data (data provided by countries and territories are selected as predictor variables), GDP per capita and number of population are potentially considered as predictor variables. Please refer to the README.md for details of the analysis datasets. 
 
-The variables that are not available in 2022 have been dropped. In addition, variables with 50% missing values are deleted. Categorical variables are not considered as a predictor variables except WHO region variable (`g_whoregion`). The `g_whoregion` values were transformed one-hot encoded. 
+The variables that are not available in 2022 have been dropped. In addition, variables with 50% missing values are deleted. Categorical variables are not considered as predictor variables except WHO region variable (`g_whoregion`). The `g_whoregion` values were transformed one-hot encoded. 
 
 Finally, the 201 countries and 169 predictor variables are considered in the log regression model. 
 
@@ -273,7 +273,7 @@ ggplot(tb_imputed, aes(c_newinc/1e5)) +
     theme_gtb() 
 ```
 
-The above figure shows the distribution of the new TB cases in 2022. The outcome variable is count data and the distribution is positive skewed. Hence, poisson canonical link function is used for developing a generalized linear model. 
+The above figure shows the distribution of the new TB cases in 2022. The outcome variable is count data and the distribution is positive skewed. Hence, the poisson canonical link function is used for developing a generalized linear model. 
 
 ```{r exercise 3 fit}
 fit_tb <- glm(c_newinc ~ ., family="poisson", data=tb_dat)
@@ -299,3 +299,4 @@ knitr::kable(R2_tab)
 ```
 The $R^2$ and Adjusted $R^2$ values are very closed to 1. The values imply that most of the variation (99\%) of the outcome variable is explained by predictors variables in the log regression model.
 
+In conclusion, the log regression model is developed to predict TB incidence (new TB cases) in a country. The model will be useful for estimating TB incidence. However, the model was developed using 2022 data. The validation of the developed model should be explored in the future.
