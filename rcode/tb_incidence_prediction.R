@@ -1,4 +1,4 @@
-
+getwd()
 setwd("./")
 
 # library and Source files
@@ -184,8 +184,6 @@ cont.scaled  <- con_var_imputed %>% select(!c_newinc)
 cont.scaled  <-  as.matrix(as.data.frame(scale(cont.scaled)))
 tb_imputed <- cbind(tb_base,  cont.scaled, region)
 tb_dat <- tb_imputed %>%  select(!c("country.x", "g_whoregion", "iso3",  "year")) 
-
-tb_dat <- tb_imputed %>%  select(!c("country.x", "g_whoregion", "iso3",  "year"))
 
 
 ggplot(tb_imputed, aes(c_newinc/1e5)) + 

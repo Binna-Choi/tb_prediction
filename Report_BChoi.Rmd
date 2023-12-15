@@ -259,9 +259,9 @@ The total of new and relapse cases and cases with unknown previous TB treatment 
 ####### **Predictor variables**
 All variables from WHO TB data (data provided by countries and territories are selected as predictor variables), GDP per capita and number of population are potentially considered as predictor variables. Please refer to the README.md for details of the analysis datasets. 
 
-The variables that are not available in 2022 have been dropped. In addition, variables with 50% missing values are deleted. Categorical variables are not considered as predictor variables except WHO region variable (`g_whoregion`). The `g_whoregion` values were transformed one-hot encoded. 
+The variables that are not available in 2022 have been dropped. In addition, variables with 50% missing values are deleted. Categorical variables are not considered as predictor variables except WHO region variable (`g_whoregion`). The `g_whoregion` values were transformed one-hot encoded. Continuous variables were re-scaled into z-score standardization.
 
-Finally, the 201 countries and 169 predictor variables are considered in the log regression model. 
+Finally, the 201 countries and 79 predictor variables are considered in the log regression model. 
 
 
 ```{r exercise 3 figure3.1, fig.align="center", warning=FALSE, out.width="75%"}
